@@ -96,9 +96,10 @@ select{width:100%;min-height:52px;margin-top:12px;border-radius:12px;border:2px 
 </section>
 
 <button class="big" id="b4" aria-expanded="false">📊 لوحة الوايت والمتأخرين</button>
-<section class="panel" id="p4" hidden><div id="dash"></div></section>
+<section class="panel" id="p4" hidden><div id="dash"></div><h2>📈 الرسم الشهري</h2><select id="chMetric"><option value="cmp">التكلفة مقابل الدفعات (ريال)</option><option value="cost">تكلفة الوايتات (ريال)</option><option value="tons">الأطنان</option><option value="count">عدد الوايتات</option><option value="pay">الدفعات (ريال)</option></select><div id="chart"></div></section>
 <button class="big" id="b5" aria-expanded="false">👥 بيانات الشقق</button>
-<section class="panel" id="p5" hidden><div class="prev">اكتب اسم الساكن ورقم جواله، وتُحفظ تلقائياً. زر 🔄 لتسجيل ساكن جديد في الشقة.</div><div id="ppl"></div><button class="go sec" id="tplBtn">✏️ نص رسالة الواتساب</button>
+<section class="panel" id="p5" hidden><div class="prev">اكتب اسم الساكن ورقم جواله، وتُحفظ تلقائياً. زر 🔄 لتسجيل ساكن جديد في الشقة.</div><div id="ppl"></div><button class="go sec" id="chkBtn">🔍 افحص حفظ الأسماء في الجدول</button>
+<button class="go sec" id="tplBtn">✏️ نص رسالة الواتساب</button>
 <button class="go sec" id="ccBtn">🌍 رمز الدولة للجوالات</button>
 <button class="go sec" id="pinBtn">🔒 رمز حماية التعديل والحذف</button><div id="m5"></div></section>
 <h2 style="display:flex;justify-content:space-between;align-items:center">سجل العمليات <button class="chip" id="logTgl" style="min-height:40px;padding:0 14px;font-size:15px" aria-expanded="true">▾ طي</button></h2>
@@ -181,7 +182,7 @@ function render(){
  $('eq').textContent='649 + وايتات '+fm(D.tankTotal)+' − دفعات '+fm(D.payTotal)+' = '+fm(sum);
  $('paptName').textContent=sel?(sel===EX?'شقة 2 (معفاة)':lbl(sel)):'المس مربع شقة';
  $('vacTxt').textContent=vac.size?': '+[...vac].sort((x,y)=>x-y).join('، '):': لا يوجد';
- tprev();pprev();stmt();dash();pplList();logView();
+ tprev();pprev();stmt();dash();chartDraw();pplList();logView();
  const L=$('log');L.innerHTML=log.length?'':'<li>لا توجد عمليات بعد.</li>';
  log.map((e,i)=>[e,i]).reverse().forEach(([e,i])=>{const li=document.createElement('li');
   li.textContent=e.t==='sup'?'🏭 دفعة للمورد '+fm(e.amt)+' ريال - '+e.date:e.t==='tank'?'🚚 وايت '+fm(e.cost)+' ريال - '+e.date+(e.vac.length?' (خالية: '+e.vac.join('، ')+')':''):'💧 دفعة '+fm(e.amt)+' ريال لشقة '+e.apt+' - '+e.date+(e.alloc?' ← '+e.alloc:'');const bx=document.createElement('div');bx.className='row';bx.style.marginTop='6px';bx.innerHTML='<button class="chip" data-i="'+i+'" data-act="ed">✏️ تعديل</button><button class="chip" data-i="'+i+'" data-act="del">🗑️ حذف</button>';if(e.note){const n=document.createElement('div');n.className='prev';n.textContent='📝 '+e.note;li.appendChild(n)}if(e.ts){const s=document.createElement('div');s.className='prev';s.textContent='⏱️ سُجّل: '+new Date(e.ts).toLocaleString('ar',{dateStyle:'short',timeStyle:'short'});li.appendChild(s)}li.appendChild(bx);L.appendChild(li)});
@@ -277,7 +278,7 @@ async function doLoad(manual){if(!gsU()){if(manual)msg('m4','الصق رابط W
  if(manual&&log.length&&!confirm('سيستبدل ما في الجدول العمليات الحالية. متابعة؟'))return;
  st('جارٍ التحميل من الجدول...');
  try{const j=await gsCall({},'?action=load');
-  if(j&&Array.isArray(j.log))log=j.log;if(j&&j.people&&typeof j.people==='object'){people=j.people;savePeople();$('ppl').dataset.b=''}last=(j&&Array.isArray(j.log)&&j.people)?JSON.stringify([log,people]):null
+  if(j&&Array.isArray(j.log))log=j.log;let pend=false;if(j&&j.people&&typeof j.people==='object'){const m=mergePeople(j.people,people);people=m.p;pend=m.pend;savePeople();$('ppl').dataset.b=''}last=(!pend&&j&&Array.isArray(j.log)&&j.people)?JSON.stringify([log,people]):null
   ready=true;render();st('✅ تم التحميل من الجدول: '+log.length+' عملية');if(manual)msg('m4','تم التحميل: '+log.length+' عملية','s')}
  catch(e){ready=false;st('⚠️ تعذر التحميل، المزامنة التلقائية متوقفة');if(manual)gsErr(e)}}
 $('gsSync').onclick=()=>doSync(true);
@@ -297,7 +298,9 @@ $('payFull').onclick=()=>{if(!sel){msg('m2','المس مربع الشقة أول
  $('amt').value=String(b/100);render()};
 function info(a){const p=people[a]||{},l=lastPay(a);return '<div class="prev">'+(p.phone?'📞 <a href="tel:'+esc(p.phone)+'">'+esc(p.phone)+'</a> · ':'')+(waLink(a,derive(log))&&derive(log).S[a].bal>0?'<a href="'+waLink(a,derive(log))+'" target="_blank" rel="noopener">💬 تذكير</a> · ':'')+'🚚 غير مسدد: '+unp(derive(log),a)+' · آخر دفعة: '+(l?l+' (منذ '+ago(l)+' يوماً)':'لا توجد')+(p.prev&&p.prev.length?' · سابقاً: '+p.prev.map(x=>esc(x.name)+' حتى '+x.until).join('، '):'')+'</div>'}
 function pplList(){if(panel!=='p5'||$('ppl').dataset.b==='1')return;let h='';for(let a=1;a<=11;a++){const p=people[a]||{};h+='<div class="row" style="margin:6px 0"><b style="flex:0 0 62px;align-self:center">شقة '+a+'</b><input data-a="'+a+'" data-k="name" placeholder="الاسم" value="'+esc(p.name||'')+'"><input data-a="'+a+'" data-k="phone" inputmode="tel" placeholder="الجوال" value="'+esc(p.phone||'')+'"><button class="chip" data-a="'+a+'" style="flex:0 0 auto">🔄</button></div>'}$('ppl').innerHTML=h;$('ppl').dataset.b='1'}
-$('ppl').onchange=e=>{const t=e.target,a=t.dataset.a;if(!a)return;people[a]=people[a]||{name:'',phone:''};people[a][t.dataset.k]=t.value.trim();savePeople();render()};
+let pt=null;const pset=e=>{const t=e.target,a=t.dataset.a;if(!a)return false;people[a]=people[a]||{name:'',phone:''};people[a][t.dataset.k]=t.value.trim();people.__ts=Date.now();savePeople();return true};
+$('ppl').oninput=e=>{if(pset(e)){clearTimeout(pt);pt=setTimeout(render,700)}};
+$('ppl').onchange=e=>{if(pset(e)){clearTimeout(pt);render();msg('m5','✅ حُفظ الاسم، وتتم المزامنة مع الجدول...','s')}};
 function dash(){if(panel!=='p4')return;const D=derive(log);
  const T=TK.map(d=>({d,c:17000})).concat(log.filter(e=>e.t==='tank').map(e=>({d:e.date,c:e.cost}))).sort((x,y)=>x.d<y.d?-1:1);
  const n=T.length,tc=T.reduce((s,x)=>s+x.c,0),f=T[0].d,l=T[n-1].d;
@@ -332,13 +335,13 @@ $('log').onclick=ev=>{const b=ev.target.closest('button');if(!b)return;const i=+
  if(b.dataset.act==='del'){if(confirm('حذف هذه العملية؟ ستُعاد الأرصدة تلقائياً.')){log.splice(i,1);render()}}else editEntry(i)});};
 const hh=s=>{let x=5381;for(const c of String(s))x=((x<<5)+x+c.charCodeAt(0))|0;return String(x)};
 function guard(fn){if(!people.__pin){fn();return}const p=prompt('أدخل رمز الحماية:');if(p===null)return;if(hh(p.trim())===people.__pin)fn();else alert('رمز خاطئ')}
-$('pinBtn').onclick=()=>guard(()=>{const n=prompt('الرمز الجديد (4 أرقام، أو اتركه فارغاً لإلغاء الحماية):');if(n===null)return;const t=n.trim();if(t&&!/^\d{4}$/.test(t)){alert('يجب أن يكون 4 أرقام');return}if(t)people.__pin=hh(t);else delete people.__pin;savePeople();render();msg('m5',t?'تم تعيين الرمز':'أُلغيت الحماية','s')});
+$('pinBtn').onclick=()=>guard(()=>{const n=prompt('الرمز الجديد (4 أرقام، أو اتركه فارغاً لإلغاء الحماية):');if(n===null)return;const t=n.trim();if(t&&!/^\d{4}$/.test(t)){alert('يجب أن يكون 4 أرقام');return}if(t)people.__pin=hh(t);else delete people.__pin;people.__ts=Date.now();savePeople();render();msg('m5',t?'تم تعيين الرمز':'أُلغيت الحماية','s')});
 const _rs0=$('reset').onclick;$('reset').onclick=()=>guard(_rs0);
 $('ppl').onclick=ev=>{const b=ev.target.closest('button');if(!b)return;const a=+b.dataset.a,o=people[a]||{name:'',phone:''};
  if(!confirm('تسجيل ساكن جديد لشقة '+a+'؟ المديونية القائمة تبقى على الشقة.'))return;
  const n=prompt('اسم الساكن الجديد:');if(n===null||!n.trim())return;const ph=prompt('جواله (اختياري):','');if(ph===null)return;
  const d=prompt('تاريخ الانتقال (سنة-شهر-يوم):',today());if(d===null||!/^\d{4}-\d{2}-\d{2}$/.test(d.trim())){alert('تاريخ غير صحيح');return}
- people[a]={name:n.trim(),phone:ph.trim(),since:d.trim(),prev:(o.prev||[]).concat(o.name?[{name:o.name,phone:o.phone||'',until:d.trim()}]:[])};savePeople();$('ppl').dataset.b='';render()};
+ people[a]={name:n.trim(),phone:ph.trim(),since:d.trim(),prev:(o.prev||[]).concat(o.name?[{name:o.name,phone:o.phone||'',until:d.trim()}]:[])};people.__ts=Date.now();savePeople();$('ppl').dataset.b='';render()};
 $('stShare').onclick=async()=>{if(!stApt){alert('المس مربع شقة أولاً');return}const D=derive(log),R=rng();const ls=D.S[stApt].st.filter(x=>inR(x,R));
  let t='كشف حساب '+lbl(stApt)+' - من '+(R.f||'البداية')+' إلى '+(R.t||'اليوم')+'\n';t+=ls.length?ls.map(x=>x.d+' '+x.t+(x.n?' ('+x.n+')':'')+': '+fm(x.db||x.cr)).join('\n'):'لا حركات هذا الشهر';t+='\nالمتبقي: '+fm(eb(D,stApt))+' ريال';
  const o=$('csvOut');o.hidden=false;o.value=t;try{if(navigator.share)await navigator.share({text:t});else await navigator.clipboard.writeText(t)}catch(e){}};
@@ -357,8 +360,31 @@ const TPL0='السلام عليكم {الاسم}،\nتذكير بمديونية 
 const waNum=p=>{let d=String(p||'').replace(/\D/g,'');if(!d)return '';const cc=people.__cc||'966';if(d.startsWith('00'))d=d.slice(2);else if(d.startsWith('0'))d=cc+d.slice(1);else if(!d.startsWith(cc)&&d.length<=9)d=cc+d;return d};
 function waMsg(a,D){const l=lastPay(a);return (people.__tpl||TPL0).split('{الاسم}').join(nm(a)||('شقة '+a)).split('{المبلغ}').join(fm(D.S[a].bal)).split('{الوايتات}').join(unp(D,a)).split('{آخر_دفعة}').join(l||'لا توجد')}
 function waLink(a,D){const n=waNum((people[a]||{}).phone);return n?'https://wa.me/'+n+'?text='+encodeURIComponent(waMsg(a,D)):''}
-$('tplBtn').onclick=()=>{const t=prompt('نص الرسالة. استخدم: {الاسم} {المبلغ} {الوايتات} {آخر_دفعة} ولسطر جديد اكتب \\n',(people.__tpl||TPL0).replace(/\n/g,'\\n'));if(t===null)return;if(t.trim())people.__tpl=t.replace(/\\n/g,'\n');else delete people.__tpl;savePeople();render();msg('m5','تم حفظ نص الرسالة','s')};
-$('ccBtn').onclick=()=>{const c=prompt('رمز الدولة بدون + (السعودية 966):',people.__cc||'966');if(c===null)return;if(/^\d{1,4}$/.test(c.trim())){people.__cc=c.trim();savePeople();render();msg('m5','تم حفظ رمز الدولة','s')}else alert('أرقام فقط')};
+$('tplBtn').onclick=()=>{const t=prompt('نص الرسالة. استخدم: {الاسم} {المبلغ} {الوايتات} {آخر_دفعة} ولسطر جديد اكتب \\n',(people.__tpl||TPL0).replace(/\n/g,'\\n'));if(t===null)return;if(t.trim())people.__tpl=t.replace(/\\n/g,'\n');else delete people.__tpl;people.__ts=Date.now();savePeople();render();msg('m5','تم حفظ نص الرسالة','s')};
+$('ccBtn').onclick=()=>{const c=prompt('رمز الدولة بدون + (السعودية 966):',people.__cc||'966');if(c===null)return;if(/^\d{1,4}$/.test(c.trim())){people.__cc=c.trim();people.__ts=Date.now();savePeople();render();msg('m5','تم حفظ رمز الدولة','s')}else alert('أرقام فقط')};
+function chartDraw(){if(panel!=='p4')return;const mm=$('chMetric').value,M={};
+ const add=(d,k,v)=>{const m=String(d).slice(0,7);M[m]=M[m]||{c:0,n:0,p:0};M[m][k]+=v};
+ TK.forEach(d=>{add(d,'c',17000);add(d,'n',1)});
+ log.forEach(e=>{if(e.t==='tank'){add(e.date,'c',e.cost);add(e.date,'n',1)}else if(e.t==='pay')add(e.date,'p',e.amt)});
+ const ks=Object.keys(M).sort(),el=$('chart');if(!ks.length){el.innerHTML='لا توجد بيانات بعد.';return}
+ const val=x=>mm==='cost'?x.c:mm==='tons'?x.n*30:mm==='count'?x.n:x.p;
+ const txt=v=>(mm==='tons'||mm==='count')?String(v):fm(v);
+ const mx=Math.max(1,...ks.map(k=>mm==='cmp'?Math.max(M[k].c,M[k].p):val(M[k])));
+ const bar=(v,col)=>'<div style="flex:1;background:var(--ac2);border-radius:8px;height:20px"><div style="width:'+Math.round(v/mx*100)+'%;height:100%;background:'+col+';border-radius:8px;min-width:'+(v?3:0)+'px"></div></div>';
+ let h='';
+ if(mm==='cmp')h+='<div class="prev" style="margin-bottom:6px">⬛ التكلفة · 🟩 الدفعات (المسجلة بالصفحة فقط)</div>';
+ ks.forEach(k=>{const x=M[k];
+  if(mm==='cmp')h+='<div style="margin:10px 0"><b style="font-size:14px">'+k+'</b><div style="display:flex;align-items:center;gap:8px;margin:3px 0">'+bar(x.c,'var(--ac)')+'<span style="flex:0 0 64px;font-size:13px">'+fm(x.c)+'</span></div><div style="display:flex;align-items:center;gap:8px">'+bar(x.p,'var(--ok)')+'<span style="flex:0 0 64px;font-size:13px">'+fm(x.p)+'</span></div></div>';
+  else h+='<div style="display:flex;align-items:center;gap:8px;margin:8px 0"><span style="flex:0 0 64px;font-size:14px">'+k+'</span>'+bar(val(x),'var(--ac)')+'<b style="flex:0 0 64px;font-size:14px">'+txt(val(x))+'</b></div>'});
+ el.innerHTML=h}
+$('chMetric').onchange=render;
+function mergePeople(s,l){const c=o=>Object.keys(o).filter(k=>/^\d+$/.test(k)&&((o[k]||{}).name||(o[k]||{}).phone)).length;const st=s.__ts||0,lt=l.__ts||0;return(st>lt||(st===lt&&c(s)>=c(l)))?{p:s,pend:false}:{p:l,pend:true}}
+$('chkBtn').onclick=async()=>{if(!gsU()){msg('m5','الصق رابط الجدول أولاً','e');return}
+ try{const j=await gsCall({},'?action=load');
+  if(!('people' in j)){msg('m5','⚠️ النشر المتصل قديم ولا يدعم حفظ الأسماء. يلزم تحديث النشر.','e');return}
+  const o=j.people||{},n=Object.keys(o).filter(k=>/^\d+$/.test(k)&&(o[k]||{}).name).length;
+  msg('m5',n?'✅ الجدول يحفظ '+n+' أسماء':'⚠️ النشر يدعم الأسماء لكن الجدول لا يحتوي أسماء بعد. اضغط ⬆️ مزامنة الآن.',n?'s':'e')}
+ catch(e){msg('m5','فشل الفحص: '+(e&&e.message?e.message:e),'e')}};
 render();doLoad(false);
 </script>
 </body>
